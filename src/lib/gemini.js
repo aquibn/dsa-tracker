@@ -3,7 +3,7 @@ export async function askGemini(prompt, apiKey) {
     throw new Error('Please add your Gemini API Key in Settings first.');
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const response = await fetch(endpoint, {
     method: 'POST',
