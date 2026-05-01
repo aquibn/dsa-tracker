@@ -1,22 +1,30 @@
 import { useState, useEffect } from 'react';
 import { initialProblems } from './data/problems';
 import ReferenceView from './ReferenceView';
+import { askGemini } from './lib/gemini';
 import './index.css';
 
 function App() {
   const [activeView, setActiveView] = useState('tracker'); // 'tracker' or 'reference'
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
   const [problems, setProblems] = useState(() => {
     const saved = localStorage.getItem('dsaTrackerState_v2');
     return saved ? JSON.parse(saved) : initialProblems;
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProblem, setSelectedProblem] = useState(null);
-
   const [selectedDay, setSelectedDay] = useState('All');
 
   useEffect(() => {
     localStorage.setItem('dsaTrackerState_v2', JSON.stringify(problems));
   }, [problems]);
+
+  const saveApiKey = (newKey) => {
+    setApiKey(newKey);
+    localStorage.setItem('gemini_api_key', newKey);
+    setIsSettingsOpen(false);
+  };
 
   const updateProblem = (updatedProblem) => {
     setProblems(problems.map(p => 
@@ -59,6 +67,13 @@ function App() {
             onClick={() => setActiveView('reference')}
           >
             DS Reference
+          </button>
+          <button 
+            className="btn btn-outline"
+            onClick={() => setIsSettingsOpen(true)}
+            title="Settings"
+          >
+            ⚙️
           </button>
         </div>
       </header>
@@ -143,7 +158,33 @@ function App() {
             <ProblemDetail 
               problem={selectedProblem} 
               onSave={updateProblem} 
+              apiKey={apiKey}
             />
+          </div>
+        </div>
+      )}
+
+      {isSettingsOpen && (
+        <div className="modal-overlay" onClick={() => setIsSettingsOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setIsSettingsOpen(false)}>&times;</button>
+            <h2>Settings</h2>
+            <div className="form-group" style={{marginTop: '1.5rem'}}>
+              <label>Gemini API Key</label>
+              <input 
+                type="password" 
+                className="form-control" 
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Paste your API key here..."
+              />
+              <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem'}}>
+                Your key is saved locally in your browser and never sent to our servers.
+              </p>
+            </div>
+            <button className="btn btn-primary" style={{width: '100%'}} onClick={() => saveApiKey(apiKey)}>
+              Save Settings
+            </button>
           </div>
         </div>
       )}
@@ -151,10 +192,14 @@ function App() {
   );
 }
 
-function ProblemDetail({ problem, onSave }) {
+function ProblemDetail({ problem, onSave, apiKey }) {
   const [notes, setNotes] = useState(problem.notes || '');
   const [status, setStatus] = useState(problem.status || 'todo');
   const [confidence, setConfidence] = useState(problem.confidence || 'low');
+  
+  const [aiResponse, setAiResponse] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [hintLevel, setHintLevel] = useState(1);
 
   const handleSave = () => {
     onSave({
@@ -164,6 +209,37 @@ function ProblemDetail({ problem, onSave }) {
       confidence,
       lastReviewDate: new Date().toISOString()
     });
+  };
+
+  const handleAiAction = async (type) => {
+    setIsAiLoading(true);
+    setAiResponse('');
+    try {
+      let prompt = '';
+      if (type === 'intuition') {
+        prompt = `Explain the intuition and pattern for the LeetCode problem "${problem.title}" (${problem.category}). Do not provide the full code, focus on the "why" and the thought process.`;
+      } else if (type === 'review') {
+        if (!notes.trim()) {
+          throw new Error('Please write some notes or code in the box first for me to review!');
+        }
+        prompt = `Review the following notes/code for the LeetCode problem "${problem.title}":\n\n${notes}\n\nProvide feedback on time/space complexity, point out potential bugs, and suggest improvements. Be concise.`;
+      } else if (type === 'hint') {
+        prompt = `Provide hint level ${hintLevel} for the LeetCode problem "${problem.title}". 
+        Level 1: What Data Structure to use. 
+        Level 2: The core logic/algorithm strategy. 
+        Level 3: Brief pseudocode. 
+        Current level is ${hintLevel}. Ensure the response is concise and helpful.`;
+        if (hintLevel < 3) setHintLevel(hintLevel + 1);
+        else setHintLevel(1); // Reset after 3 hints
+      }
+
+      const response = await askGemini(prompt, apiKey);
+      setAiResponse(response);
+    } catch (err) {
+      setAiResponse(`❌ Error: ${err.message}`);
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   return (
@@ -225,10 +301,61 @@ function ProblemDetail({ problem, onSave }) {
           value={notes}
           onChange={e => setNotes(e.target.value)}
           placeholder="Write down the intuition, time complexity, space complexity, and common pitfalls..."
+          style={{minHeight: '150px'}}
         />
       </div>
 
-      <button className="btn btn-primary" style={{width: '100%'}} onClick={handleSave}>
+      <div className="ai-section" style={{marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid var(--border-color)'}}>
+        <h3 style={{marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+          ✨ AI Assistant
+        </h3>
+        <div className="btn-group" style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem'}}>
+          <button 
+            className="btn btn-outline" 
+            style={{flex: 1, fontSize: '0.85rem', padding: '0.5rem'}}
+            onClick={() => handleAiAction('intuition')}
+            disabled={isAiLoading}
+          >
+            💡 Intuition
+          </button>
+          <button 
+            className="btn btn-outline" 
+            style={{flex: 1, fontSize: '0.85rem', padding: '0.5rem'}}
+            onClick={() => handleAiAction('review')}
+            disabled={isAiLoading}
+          >
+            🔍 Review
+          </button>
+          <button 
+            className="btn btn-outline" 
+            style={{flex: 1, fontSize: '0.85rem', padding: '0.5rem'}}
+            onClick={() => handleAiAction('hint')}
+            disabled={isAiLoading}
+          >
+            🪜 Hint {hintLevel}
+          </button>
+        </div>
+
+        {(aiResponse || isAiLoading) && (
+          <div className="ai-response" style={{
+            background: '#f0f4ff',
+            padding: '1rem',
+            borderRadius: 'var(--radius)',
+            fontSize: '0.9rem',
+            border: '1px solid #d0dbff',
+            minHeight: '60px',
+            position: 'relative'
+          }}>
+            {isAiLoading ? (
+              <div className="loading-dots">Thinking...</div>
+            ) : (
+              <div style={{whiteSpace: 'pre-wrap'}}>{aiResponse}</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <button className="btn btn-primary" style={{width: '100%', marginTop: '2rem'}} onClick={handleSave}>
         Save Changes
       </button>
     </div>

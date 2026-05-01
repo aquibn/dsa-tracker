@@ -8,6 +8,10 @@ A powerful, standalone tracker designed to help you conquer **200 Data Structure
 
 ## 🚀 Features
 
+- **AI Mastery Assistant**: Integrated Gemini AI to act as your personal coding coach:
+  - **💡 Intuition**: Get high-level pattern explanations without spoilers.
+  - **🔍 Review**: AI-powered analysis of your notes and complexity.
+  - **🪜 Tiered Hints**: Progressively more detailed hints (DS -> Logic -> Pseudocode).
 - **200 Problem Roadmap**: Carefully curated list of 200 problems organized into a 30-day schedule.
 - **Progress Tracking**: Monitor your completion percentage and daily targets.
 - **LeetCode Integration**: Direct links to solve every problem on LeetCode.
