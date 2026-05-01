@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { initialProblems } from './data/problems';
 import ReferenceView from './ReferenceView';
-import { askGemini } from './lib/gemini';
+import { askAI } from './lib/ai';
 import './index.css';
 
 function App() {
-  const [activeView, setActiveView] = useState('tracker'); // 'tracker' or 'reference'
+  const [activeView, setActiveView] = useState('tracker'); 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
+  
+  const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('ai_provider') || 'openai');
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('ai_api_key') || '');
+
   const [problems, setProblems] = useState(() => {
     const saved = localStorage.getItem('dsaTrackerState_v2');
     return saved ? JSON.parse(saved) : initialProblems;
@@ -20,9 +23,11 @@ function App() {
     localStorage.setItem('dsaTrackerState_v2', JSON.stringify(problems));
   }, [problems]);
 
-  const saveApiKey = (newKey) => {
+  const saveSettings = (newKey, newProvider) => {
     setApiKey(newKey);
-    localStorage.setItem('gemini_api_key', newKey);
+    setAiProvider(newProvider);
+    localStorage.setItem('ai_api_key', newKey);
+    localStorage.setItem('ai_provider', newProvider);
     setIsSettingsOpen(false);
   };
 
@@ -159,6 +164,7 @@ function App() {
               problem={selectedProblem} 
               onSave={updateProblem} 
               apiKey={apiKey}
+              provider={aiProvider}
             />
           </div>
         </div>
@@ -168,21 +174,35 @@ function App() {
         <div className="modal-overlay" onClick={() => setIsSettingsOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setIsSettingsOpen(false)}>&times;</button>
-            <h2>Settings</h2>
+            <h2>AI Settings</h2>
+            
             <div className="form-group" style={{marginTop: '1.5rem'}}>
-              <label>Gemini API Key</label>
+              <label>AI Provider</label>
+              <select 
+                className="form-control" 
+                value={aiProvider} 
+                onChange={(e) => setAiProvider(e.target.value)}
+              >
+                <option value="openai">OpenAI (ChatGPT)</option>
+                <option value="gemini">Google Gemini</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>{aiProvider === 'openai' ? 'OpenAI' : 'Gemini'} API Key</label>
               <input 
                 type="password" 
                 className="form-control" 
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Paste your API key here..."
+                placeholder={`Paste your ${aiProvider} key here...`}
               />
               <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem'}}>
                 Your key is saved locally in your browser and never sent to our servers.
               </p>
             </div>
-            <button className="btn btn-primary" style={{width: '100%'}} onClick={() => saveApiKey(apiKey)}>
+            
+            <button className="btn btn-primary" style={{width: '100%'}} onClick={() => saveSettings(apiKey, aiProvider)}>
               Save Settings
             </button>
           </div>
@@ -192,7 +212,7 @@ function App() {
   );
 }
 
-function ProblemDetail({ problem, onSave, apiKey }) {
+function ProblemDetail({ problem, onSave, apiKey, provider }) {
   const [notes, setNotes] = useState(problem.notes || '');
   const [status, setStatus] = useState(problem.status || 'todo');
   const [confidence, setConfidence] = useState(problem.confidence || 'low');
@@ -230,10 +250,10 @@ function ProblemDetail({ problem, onSave, apiKey }) {
         Level 3: Brief pseudocode. 
         Current level is ${hintLevel}. Ensure the response is concise and helpful.`;
         if (hintLevel < 3) setHintLevel(hintLevel + 1);
-        else setHintLevel(1); // Reset after 3 hints
+        else setHintLevel(1); 
       }
 
-      const response = await askGemini(prompt, apiKey);
+      const response = await askAI(prompt, apiKey, provider);
       setAiResponse(response);
     } catch (err) {
       setAiResponse(`❌ Error: ${err.message}`);
