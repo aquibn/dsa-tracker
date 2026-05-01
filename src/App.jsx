@@ -228,7 +228,19 @@ function App() {
             <h2>App Settings</h2>
             
             <div className="form-group" style={{marginTop: '1.5rem'}}>
-              <label>Plan Duration (Days)</label>
+              <label>Preparation Goal (Total Days)</label>
+              <div style={{display: 'flex', gap: '0.5rem', marginBottom: '0.8rem'}}>
+                {[30, 45, 60, 90].map(d => (
+                  <button 
+                    key={d} 
+                    className={`btn ${totalDays === d ? 'btn-primary' : 'btn-outline'}`}
+                    style={{padding: '5px 10px', fontSize: '0.8rem', flex: 1}}
+                    onClick={() => setTotalDays(d)}
+                  >
+                    {d} Days
+                  </button>
+                ))}
+              </div>
               <input 
                 type="number" 
                 className="form-control" 
@@ -236,9 +248,10 @@ function App() {
                 onChange={(e) => setTotalDays(parseInt(e.target.value) || 30)}
                 min="1"
                 max="200"
+                placeholder="Or enter custom days..."
               />
               <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem'}}>
-                Distribute 200 problems over this many days.
+                The 200 problems will be automatically spread across these {totalDays} days (~{Math.round(200/totalDays * 10) / 10} per day).
               </p>
             </div>
 
