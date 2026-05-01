@@ -10,6 +10,9 @@ function App() {
   
   const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('ai_provider') || 'openai');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('ai_api_key') || '');
+  
+  const [totalDays, setTotalDays] = useState(() => parseInt(localStorage.getItem('dsa_total_days')) || 30);
+  const [currentDay, setCurrentDay] = useState(() => parseInt(localStorage.getItem('dsa_current_day')) || 1);
 
   const [problems, setProblems] = useState(() => {
     const saved = localStorage.getItem('dsaTrackerState_v2');
@@ -21,13 +24,16 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem('dsaTrackerState_v2', JSON.stringify(problems));
-  }, [problems]);
+    localStorage.setItem('dsa_total_days', totalDays);
+    localStorage.setItem('dsa_current_day', currentDay);
+    localStorage.setItem('ai_provider', aiProvider);
+    localStorage.setItem('ai_api_key', apiKey);
+  }, [problems, totalDays, currentDay, aiProvider, apiKey]);
 
-  const saveSettings = (newKey, newProvider) => {
+  const saveSettings = (newKey, newProvider, newTotalDays) => {
     setApiKey(newKey);
     setAiProvider(newProvider);
-    localStorage.setItem('ai_api_key', newKey);
-    localStorage.setItem('ai_provider', newProvider);
+    setTotalDays(newTotalDays);
     setIsSettingsOpen(false);
   };
 
@@ -38,27 +44,36 @@ function App() {
     setSelectedProblem(null);
   };
 
-  const filteredProblems = problems.filter(p => {
+  // Redistribute problems based on totalDays
+  const redistributedProblems = problems.map((p, index) => {
+    const problemsPerDay = 200 / totalDays;
+    const newDay = Math.floor(index / problemsPerDay) + 1;
+    return { ...p, day: newDay > totalDays ? totalDays : newDay };
+  });
+
+  const filteredProblems = redistributedProblems.filter(p => {
     const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          p.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDay = selectedDay === 'All' || p.day === parseInt(selectedDay);
     return matchesSearch && matchesDay;
   });
 
+  const todaysTargetProblems = redistributedProblems.filter(p => p.day === currentDay);
+
   const stats = {
-    total: problems.length,
-    completed: problems.filter(p => p.status === 'done').length,
-    review: problems.filter(p => p.status === 'review').length,
+    total: redistributedProblems.length,
+    completed: redistributedProblems.filter(p => p.status === 'done').length,
+    review: redistributedProblems.filter(p => p.status === 'review').length,
   };
 
-  const days = ['All', ...new Set(problems.map(p => p.day).filter(Boolean))].sort((a, b) => a - b);
+  const daysList = ['All', ...Array.from({length: totalDays}, (_, i) => i + 1)];
 
   return (
     <div className="container">
       <header className="header">
         <div>
-          <h1>DSA 30-Day Mastery</h1>
-          <p style={{color: 'var(--text-muted)'}}>200 Problems Roadmap</p>
+          <h1>DSA Mastery Tracker</h1>
+          <p style={{color: 'var(--text-muted)'}}>200 Problems • {totalDays} Day Roadmap</p>
         </div>
         <div className="nav-buttons">
           <button 
@@ -91,18 +106,50 @@ function App() {
               <div className="value">{Math.round((stats.completed / stats.total) * 100)}%</div>
               <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>{stats.completed} / {stats.total}</div>
             </div>
-            <div className="stat-card">
-              <h3>Needs Review</h3>
-              <div className="value" style={{color: 'var(--warning)'}}>{stats.review}</div>
+            <div className="stat-card" style={{border: '2px solid var(--primary-color)'}}>
+              <h3>Current Day</h3>
+              <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem'}}>
+                <button className="btn btn-outline" style={{padding: '2px 8px'}} onClick={() => setCurrentDay(Math.max(1, currentDay - 1))}>-</button>
+                <div className="value">{currentDay}</div>
+                <button className="btn btn-outline" style={{padding: '2px 8px'}} onClick={() => setCurrentDay(Math.min(totalDays, currentDay + 1))}>+</button>
+              </div>
+              <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>of {totalDays} Days</div>
             </div>
             <div className="stat-card">
-              <h3>Daily Target</h3>
-              <div className="value">~7</div>
-              <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Problems / Day</div>
+              <h3>Today's Target</h3>
+              <div className="value" style={{color: 'var(--success)'}}>
+                {todaysTargetProblems.filter(p => p.status === 'done').length} / {todaysTargetProblems.length}
+              </div>
+              <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Problems Done</div>
             </div>
           </div>
 
-          <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem'}}>
+          <section className="target-section" style={{marginBottom: '2rem', background: '#fff', padding: '1.5rem', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', borderLeft: '5px solid var(--success)'}}>
+            <h2 style={{marginBottom: '1rem', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+              🎯 Today's Target (Day {currentDay})
+            </h2>
+            <div className="problems-grid" style={{gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))'}}>
+              {todaysTargetProblems.map(problem => (
+                <div 
+                  key={problem.id} 
+                  className="problem-card"
+                  style={{padding: '1rem', border: problem.status === 'done' ? '1px solid var(--success)' : '1px solid var(--border-color)'}}
+                  onClick={() => setSelectedProblem(problem)}
+                >
+                  <div className="problem-title" style={{fontSize: '1rem'}}>
+                    <span style={{color: 'var(--primary-color)', marginRight: '0.5rem'}}>#{problem.id}</span>
+                    {problem.title}
+                  </div>
+                  <div style={{fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem'}}>
+                    {problem.category} • {problem.difficulty}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center'}}>
+            <h3 style={{whiteSpace: 'nowrap'}}>All Problems</h3>
             <div style={{flex: 2}}>
               <input 
                 type="text" 
@@ -120,7 +167,7 @@ function App() {
                 value={selectedDay}
                 onChange={(e) => setSelectedDay(e.target.value)}
               >
-                {days.map(day => (
+                {daysList.map(day => (
                   <option key={day} value={day}>{day === 'All' ? 'Filter by Day' : `Day ${day}`}</option>
                 ))}
               </select>
@@ -160,6 +207,10 @@ function App() {
         <div className="modal-overlay" onClick={() => setSelectedProblem(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setSelectedProblem(null)}>&times;</button>
+            <div style={{background: '#fff9db', padding: '1rem', borderRadius: 'var(--radius)', marginBottom: '1.5rem', border: '1px solid #fab005', color: '#856404', fontSize: '0.9rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+              <span>💡 Pro Tip:</span>
+              <span>Before solving, check the <u>DS Reference</u> for <strong>{selectedProblem.category}</strong>!</span>
+            </div>
             <ProblemDetail 
               problem={selectedProblem} 
               onSave={updateProblem} 
@@ -174,9 +225,24 @@ function App() {
         <div className="modal-overlay" onClick={() => setIsSettingsOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setIsSettingsOpen(false)}>&times;</button>
-            <h2>AI Settings</h2>
+            <h2>App Settings</h2>
             
             <div className="form-group" style={{marginTop: '1.5rem'}}>
+              <label>Plan Duration (Days)</label>
+              <input 
+                type="number" 
+                className="form-control" 
+                value={totalDays}
+                onChange={(e) => setTotalDays(parseInt(e.target.value) || 30)}
+                min="1"
+                max="200"
+              />
+              <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem'}}>
+                Distribute 200 problems over this many days.
+              </p>
+            </div>
+
+            <div className="form-group">
               <label>AI Provider</label>
               <select 
                 className="form-control" 
@@ -197,12 +263,9 @@ function App() {
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder={`Paste your ${aiProvider} key here...`}
               />
-              <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem'}}>
-                Your key is saved locally in your browser and never sent to our servers.
-              </p>
             </div>
             
-            <button className="btn btn-primary" style={{width: '100%'}} onClick={() => saveSettings(apiKey, aiProvider)}>
+            <button className="btn btn-primary" style={{width: '100%'}} onClick={() => saveSettings(apiKey, aiProvider, totalDays)}>
               Save Settings
             </button>
           </div>
